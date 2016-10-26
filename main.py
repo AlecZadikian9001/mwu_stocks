@@ -4,12 +4,13 @@ __author__ = "AlecZ"
 import os
 import csv
 import datetime
+import random
 import math
 from collections import OrderedDict
 
 # custom imports
 import util
-from util import verbose, info
+from util import verbose, info, error
 
 # constants
 DATA_DIR = "data"
@@ -31,6 +32,8 @@ class MWU:
         for i, loss in enumerate(expert_losses):
             prob = self._weights[i] / sum(self._weights)
             e_loss = loss * prob
+            if not math.isfinite(e_loss):
+                error("invalid loss detected")
             self._loss += e_loss # TODO IDK about this...
             self._losses[i] += e_loss
             self._weights[i] = self._weights[i] * pow((1 - self._epsilon), loss)
@@ -48,20 +51,10 @@ def load_data(dir=DATA_DIR):
     stocks = OrderedDict() # stock: tuple
     dates = set()
 
-    for fname in os.listdir(dir):
-        if not fname.endswith(".csv"):
-            continue
-
-        verbose("Opening file {}... ".format(fname), end="")
-        f = open(dir + "/" + fname, "r")
-        c = csv.reader(f)
+    def load_rows(rows):
         date_price = {} # {date: (dict with mappings for close, volume, open, high, low)}
         short_date_price = {} # {date: (dict with mappings for close, volume, open, high, low)}
-        first = True
-        for row in c:
-            if first:
-                first = False
-                continue
+        for row in rows:
             r_date, r_close, r_volume, r_open, r_high, r_low = row
             date = datetime.datetime.strptime(r_date, "%Y/%m/%d")
             dates.add(date)
@@ -83,11 +76,49 @@ def load_data(dir=DATA_DIR):
                 KEY_LOW: -float(r_low)
             }
             short_date_price[date] = d
+        return date_price, short_date_price
+
+    def csv_rows(fname):
+        f = open(fname, "r")
+        c = csv.reader(f)
+        first = True
+        for row in c:
+            if first:
+                first = False
+            else:
+                yield row
         f.close()
+
+    def fake_rows(func, dates):
+        for date in dates:
+            r_close = func(date)
+            yield date.strftime("%Y/%m/%d"), r_close, 0, 0, 0, 0
+
+    for fname in os.listdir(dir):
+        if not fname.endswith(".csv"):
+            continue
+
+        verbose("Opening file {}... ".format(fname), end="")
+        date_price, short_date_price = load_rows(csv_rows(dir + "/" + fname))
+
         symbol = fname.split(".")[0]
         stocks[symbol] = date_price
         stocks["-" + symbol] = short_date_price
         verbose("Done. Loaded {} dates.".format(len(date_price)))
+
+    sorted_dates = sorted(dates)
+    for fake_i in range(0, 1):
+
+        def mk_trending(rate, dev=0.25):
+            def trending(date):
+                ret = 20 - 10 * rate * (random.random() * dev - 1.0) * \
+                            float((date - sorted_dates[0]).days) / float((sorted_dates[-1] - sorted_dates[0]).days)
+                return ret
+            return trending
+
+        date_price, short_date_price = load_rows(fake_rows(mk_trending(-1, dev=0.25), sorted_dates))
+        stocks["fake{}".format(fake_i)] = date_price
+        stocks["-fake{}".format(fake_i)] = short_date_price
 
     return (stocks, sorted(dates))
 
@@ -109,6 +140,8 @@ def run_mwu(start_money=1.0):
             if last_close[i] is not None:
                 abs_loss = last_close[i] - cls
                 frac_loss = abs_loss / math.fabs(last_close[i])
+                if not math.isfinite(frac_loss):
+                    error("invalid loss detected")
                 losses.append(frac_loss)
 
             last_close[i] = cls
@@ -117,7 +150,7 @@ def run_mwu(start_money=1.0):
         weights = mwu.get_weights()
         for i, loss in enumerate(losses):
             # We're going to say that every day, we sell everything then buy everything according to weights
-            iter_loss += loss * weights[i] / sum(weights)
+            iter_loss = loss * weights[i] / sum(weights)
         money -= money * iter_loss
 
         mwu.run_iteration(losses)

@@ -1,10 +1,18 @@
 __author__ = 'AlecZ'
 
-def log(s, end="\n"):
-    print(s, end=end)
+def log(s, tag, end="\n"):
+    if end == "\n":
+        tag = "[{}] ".format(tag)
+    else:
+        tag = ""
+    print(tag + s, end=end)
+
+def error(s, end="\n"):
+    log(s, "ERROR", end=end)
+    raise Exception(s)
 
 def verbose(s, end="\n"):
-    log("[VERBOSE] " + s, end=end)
+    log(s, "VERBOSE", end=end)
 
 def info(s, end="\n"):
-    log("[INFO] " + s, end=end)
+    log(s, "INFO", end=end)
