@@ -19,10 +19,11 @@ KEY_VOLUME = 1
 KEY_OPEN = 2
 KEY_HIGH = 3
 KEY_LOW = 4
+DENOM=1000
 
 class MWU:
 
-    def __init__(self, num_experts, epsilon=0.25):
+    def __init__(self, num_experts, epsilon=0.5):
         self._weights = [1.0] * num_experts
         self._epsilon = epsilon
         self._loss = 0
@@ -139,10 +140,10 @@ def run_mwu(start_money=1.0):
 
             if last_close[i] is not None:
                 abs_loss = last_close[i] - cls
-                frac_loss = abs_loss / math.fabs(last_close[i])
-                if not math.isfinite(frac_loss):
+                loss = abs_loss / DENOM
+                if not math.isfinite(loss):
                     error("invalid loss detected")
-                losses.append(frac_loss)
+                losses.append(loss)
 
             last_close[i] = cls
 
@@ -151,7 +152,7 @@ def run_mwu(start_money=1.0):
         for i, loss in enumerate(losses):
             # We're going to say that every day, we sell everything then buy everything according to weights
             iter_loss = loss * weights[i] / sum(weights)
-        money -= money * iter_loss
+        money -= iter_loss
 
         mwu.run_iteration(losses)
         iteration += 1
